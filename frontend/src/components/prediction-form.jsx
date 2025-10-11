@@ -21,8 +21,8 @@ function PredictionForm({ onSubmit, loading, error }) {
   // Update the handleAutoFill function with more realistic values:
   const handleAutoFill = () => {
     const mockData = {
-      btc: [27300.67, 27500.34, 27455.23, 27350.56, 27408.34],
-      eth: [1850.45, 1865.23, 1858.67, 1870.12, 1862.89],
+      btc: [95200.50, 96100.75, 94800.25, 95500.80, 95850.30], // More realistic BTC prices for 2024
+      eth: [3420.85, 3450.60, 3380.40, 3465.25, 3440.15], // More realistic ETH prices for 2024
     };
     setPrices(mockData[selectedCoin].map(String));
     setValidationErrors([]);
@@ -81,7 +81,7 @@ function PredictionForm({ onSubmit, loading, error }) {
           {prices.map((price, index) => (
             <div key={index}>
               <label className="block font-inter text-sm text-[#64748b] mb-1">
-                Day {5 - index}
+                Day -{5 - index} (${5 - index} days ago)
               </label>
               <input
                 type="text"

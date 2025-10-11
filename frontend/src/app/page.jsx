@@ -1,40 +1,47 @@
 "use client";
-import {React, useState, useEffect} from "react";
-import WalletConnect from "../components/wallet-connect";
+import { useState, useEffect } from "react";
+import { useAuth } from "../utils/useAuth";
+import Header from "../components/Header";
+import WelcomeModal from "../components/WelcomeModal";
+import CryptoPrediction from "../components/CryptoPrediction";
+import UserPredictionHistory from "../components/UserPredictionHistory";
 import PriceDisplay from "../components/price-display";
-import PredictionForm from "../components/prediction-form";
-import TransactionStatus from "../components/transaction-status";
 
-function MainComponent() {
-  const [walletState, setWalletState] = useState({
-    isConnected: false,
-    isConnecting: false,
-    address: null,
-    error: null,
-  });
-
+export default function HomePage() {
+  const { isAuthenticated, refreshConnection } = useAuth();
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [activeTab, setActiveTab] = useState("predict");
   const [prices, setPrices] = useState(null);
   const [priceLoading, setPriceLoading] = useState(true);
   const [priceError, setPriceError] = useState(null);
+  const [autoFetch, setAutoFetch] = useState(true);
 
-  const [prediction, setPrediction] = useState(null);
-  const [predictionLoading, setPredictionLoading] = useState(false);
-  const [transactionStatus, setTransactionStatus] = useState(null);
-  const [transactionHash, setTransactionHash] = useState(null);
-  const [transactionError, setTransactionError] = useState(null);
+  // Check if user is new (for welcome modal)
+  useEffect(() => {
+    const hasSeenWelcome = localStorage.getItem('hasSeenWelcome');
+    if (!hasSeenWelcome) {
+      setShowWelcomeModal(true);
+    }
+  }, []);
 
+  // Check wallet connection on mount (only once)
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshConnection();
+    }
+  }, []); // Empty dependency array to run only once
+
+  // Fetch current prices
   useEffect(() => {
     const fetchPrices = async () => {
       try {
         const response = await fetch("https://api.binance.com/api/v3/ticker/24hr");
         if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
-  
+
         const data = await response.json();
-  
-        // Extract relevant data for BTC and ETH
         const btcData = data.find((item) => item.symbol === "BTCUSDT");
         const ethData = data.find((item) => item.symbol === "ETHUSDT");
-  
+
         setPrices({
           btc: {
             current: parseFloat(btcData.lastPrice),
@@ -45,143 +52,152 @@ function MainComponent() {
             changePercentage: parseFloat(ethData.priceChangePercent),
           },
         });
-  
+
         setPriceLoading(false);
       } catch (error) {
         setPriceError(error.message);
         setPriceLoading(false);
       }
     };
-  
-    fetchPrices();
-    const interval = setInterval(fetchPrices, 60000);
-    return () => clearInterval(interval);
-  }, []);  
 
-  const handleWalletConnect = async () => {
-    if (!window.ethereum) {
-      setWalletState((prev) => ({ ...prev, error: "Please install MetaMask" }));
-      return;
+    // Only fetch if auto-fetch is enabled
+    if (autoFetch) {
+      fetchPrices();
+      const interval = setInterval(fetchPrices, 60000);
+      return () => clearInterval(interval);
     }
+  }, [autoFetch]);
 
-    setWalletState((prev) => ({ ...prev, isConnecting: true, error: null }));
-
-    try {
-      const accounts = await window.ethereum.request({
-        method: "eth_requestAccounts",
-      });
-      setWalletState((prev) => ({
-        ...prev,
-        address: accounts[0],
-        isConnected: true,
-        isConnecting: false,
-      }));
-    } catch (err) {
-      setWalletState((prev) => ({
-        ...prev,
-        error: "Failed to connect wallet",
-        isConnecting: false,
-      }));
-    }
+  const handleCloseWelcomeModal = () => {
+    setShowWelcomeModal(false);
+    localStorage.setItem('hasSeenWelcome', 'true');
   };
 
-  const handlePredictionSubmit = async (data) => {
-    setPredictionLoading(true);
-    setTransactionError(null);
-    const cryptoType = data.coin; // Extract cryptoType from data
-    delete data.coin; // Remove coin key from data before sending
-
+  const manualRefresh = async () => {
+    setPriceLoading(true);
+    setPriceError(null);
+    
     try {
-      const response = await fetch(`http://127.0.0.1:5000/predict/${cryptoType}`, { // Dynamic URL based on cryptoType
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch("https://api.binance.com/api/v3/ticker/24hr");
+      if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
+
+      const data = await response.json();
+      const btcData = data.find((item) => item.symbol === "BTCUSDT");
+      const ethData = data.find((item) => item.symbol === "ETHUSDT");
+
+      setPrices({
+        btc: {
+          current: parseFloat(btcData.lastPrice),
+          changePercentage: parseFloat(btcData.priceChangePercent),
         },
-        body: JSON.stringify([data]), // Make sure data is in a list as per backend requirement
+        eth: {
+          current: parseFloat(ethData.lastPrice),
+          changePercentage: parseFloat(ethData.priceChangePercent),
+        },
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error: ${errorText}`);
-      }
-
-      const result = await response.json();
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      // Set prediction with the coin type included
-      setPrediction({ coin: cryptoType, price: result.prediction });
-      setTransactionStatus('success');
-      setTransactionHash(result.tx_hash);
-    } catch (err) {
-      setTransactionError(err.message || "Transaction failed");
-      setTransactionStatus('failure');
-    } finally {
-      setPredictionLoading(false);
+      setPriceLoading(false);
+    } catch (error) {
+      setPriceError(error.message);
+      setPriceLoading(false);
     }
   };
+
+  const tabs = [
+    { id: "predict", name: "Make Prediction", icon: "fas fa-brain" },
+    { id: "history", name: "My History", icon: "fas fa-history" },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#f8fafc]">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center">
-              <i className="fas fa-chart-line text-[#3b82f6] text-2xl mr-3"></i>
-              <h1 className="font-inter text-2xl font-bold text-[#1e293b]">
-                Crypto Price Predictor
-              </h1>
-            </div>
-            <WalletConnect
-              isConnected={walletState.isConnected}
-              isConnecting={walletState.isConnecting}
-              address={walletState.address}
-              error={walletState.error}
-              onConnect={handleWalletConnect}
-            />
-          </div>
-        </div>
-      </header>
-
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Header />
+      
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-          <PriceDisplay
-            prices={prices}
-            loading={priceLoading}
-            error={priceError}
-          />
-
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="font-inter text-xl font-semibold mb-4">
-              Make Your Prediction
-            </h2>
-            <p className="font-inter text-[#64748b] mb-6">
-              Enter the predicted prices for the 5 days to generate a
-              forecast. Connect your wallet to save your predictions.
-            </p>
-            <PredictionForm
-              onSubmit={handlePredictionSubmit}
-              loading={predictionLoading}
-              error={transactionError}
+          {/* Live Market Prices Section */}
+          <section className="space-y-6">
+            {/* Price controls */}
+            <div className="flex justify-end space-x-3">
+              {!autoFetch && (
+                <button
+                  onClick={manualRefresh}
+                  disabled={priceLoading}
+                  className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <i className={`fas fa-sync-alt mr-2 ${priceLoading ? 'animate-spin' : ''}`}></i>
+                  {priceLoading ? 'Refreshing...' : 'Refresh Prices'}
+                </button>
+              )}
+              
+              <button
+                onClick={() => setAutoFetch(!autoFetch)}
+                className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  autoFetch
+                    ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
+                }`}
+              >
+                <i className={`fas ${autoFetch ? 'fa-pause' : 'fa-play'} mr-2`}></i>
+                {autoFetch ? 'Pause Auto Updates' : 'Resume Auto Updates'}
+              </button>
+            </div>
+            
+            <PriceDisplay
+              prices={prices}
+              loading={priceLoading}
+              error={priceError}
             />
+          </section>
+
+          {/* Navigation Tabs */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-1">
+            <nav className="flex space-x-1" aria-label="Tabs">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-1 flex items-center justify-center px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    activeTab === tab.id
+                      ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md"
+                      : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  <i className={`${tab.icon} mr-2`}></i>
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
           </div>
 
-          {(prediction || transactionStatus) && (
-            <div className="transition-all duration-300 ease-in-out">
-              <TransactionStatus
-                prediction={prediction}
-                transactionStatus={transactionStatus}
-                transactionHash={transactionHash}
-                error={transactionError}
-              />
-            </div>
-          )}
+          {/* Tab Content */}
+          <div className="transition-all duration-300">
+            {activeTab === "predict" && (
+              <div className="space-y-6">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                    AI-Powered Crypto Prediction
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mb-6">
+                    Use advanced LSTM neural networks to predict Bitcoin and Ethereum prices. 
+                    Your predictions are automatically stored on the Skale blockchain for transparency.
+                  </p>
+                </div>
+                <CryptoPrediction />
+              </div>
+            )}
+
+            {activeTab === "history" && (
+              <UserPredictionHistory />
+            )}
+          </div>
         </div>
       </main>
+
+      {/* Welcome Modal */}
+      <WelcomeModal 
+        isOpen={showWelcomeModal} 
+        onClose={handleCloseWelcomeModal} 
+      />
     </div>
   );
 }
-
-export default MainComponent;
