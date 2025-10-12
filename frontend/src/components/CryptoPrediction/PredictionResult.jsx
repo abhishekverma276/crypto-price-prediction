@@ -2,6 +2,22 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../utils/useAuth";
 import { predictionStorage } from "../../utils/predictionStorage";
+import ErrorDisplay from "../ErrorDisplay";
+import LoadingDisplay from "../LoadingDisplay";
+import ConfidenceDisplay from "../ConfidenceDisplay";
+
+// Simple icon components as fallbacks
+const CheckCircleIcon = ({ className }) => (
+  <svg className={className} fill="currentColor" viewBox="0 0 20 20">
+    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+  </svg>
+);
+
+const ExclamationCircleIcon = ({ className }) => (
+  <svg className={className} fill="currentColor" viewBox="0 0 20 20">
+    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+  </svg>
+);
 
 export default function PredictionResult({ prediction, cryptoType, inputData, inputMethod }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -124,6 +140,15 @@ export default function PredictionResult({ prediction, cryptoType, inputData, in
             </p>
           </div>
         </div>
+
+        {/* Confidence Intervals */}
+        {prediction.confidence && (
+          <ConfidenceDisplay 
+            confidence={prediction.confidence}
+            prediction={prediction.price || prediction.prediction}
+            cryptoType={cryptoType}
+          />
+        )}
 
         {/* Transaction Info */}
         {prediction.tx_hash && (

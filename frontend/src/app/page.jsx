@@ -6,6 +6,7 @@ import WelcomeModal from "../components/WelcomeModal";
 import CryptoPrediction from "../components/CryptoPrediction";
 import UserPredictionHistory from "../components/UserPredictionHistory";
 import PriceDisplay from "../components/price-display";
+import SystemStatus from "../components/SystemStatus";
 
 export default function HomePage() {
   const { isAuthenticated, refreshConnection } = useAuth();
@@ -198,6 +199,9 @@ export default function HomePage() {
         isOpen={showWelcomeModal} 
         onClose={handleCloseWelcomeModal} 
       />
+
+      {/* System Status */}
+      <SystemStatus />
     </div>
   );
 }

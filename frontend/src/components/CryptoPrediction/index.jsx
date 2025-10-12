@@ -8,24 +8,43 @@ import OnlineInput from "./OnlineInput";
 import ChartPreview from "./ChartPreview";
 import PredictButton from "./PredictButton";
 import PredictionResult from "./PredictionResult";
-import { usePrediction, generateSequenceFromValues } from "../../utils/usePrediction";
+import ErrorDisplay from "../ErrorDisplay";
+import LoadingDisplay from "../LoadingDisplay";
+import EnhancedChart from "../EnhancedChart";
+import { usePrediction, generateSequenceFromValues, useBackendHealth } from "../../utils/usePrediction";
 
 export default function CryptoPrediction() {
   const [selectedCrypto, setSelectedCrypto] = useState("btc");
   const [inputMethod, setInputMethod] = useState("manual");
   const [sequence, setSequence] = useState([]);
   const [isSequenceValid, setIsSequenceValid] = useState(false);
+  const [validationErrors, setValidationErrors] = useState(null);
   
-  const { predict, isLoading, error, lastPrediction, reset } = usePrediction();
+  const { 
+    predict, 
+    validateInput, 
+    isLoading, 
+    error, 
+    lastPrediction, 
+    predictionHistory, 
+    reset,
+    errorMessage 
+  } = usePrediction();
+  
+  const { data: backendHealth } = useBackendHealth();
 
   const handleSequenceUpdate = (newSequence) => {
     setSequence(newSequence);
-    setIsSequenceValid(newSequence.length === 60 && newSequence.every(val => typeof val === 'number' && val > 0));
+    
+    // Validate the sequence
+    const validation = validateInput(newSequence);
+    setIsSequenceValid(validation.valid);
+    setValidationErrors(validation.valid ? null : validation);
   };
 
   const handlePredict = async () => {
     if (!isSequenceValid) {
-      alert('Please provide a valid 60-point sequence');
+      // Show validation errors instead of alert
       return;
     }
 
@@ -39,11 +58,24 @@ export default function CryptoPrediction() {
   const handleReset = () => {
     setSequence([]);
     setIsSequenceValid(false);
+    setValidationErrors(null);
     reset();
   };
 
   return (
     <div className="space-y-6">
+      {/* Backend Health Status */}
+      {backendHealth && !backendHealth.isHealthy && (
+        <ErrorDisplay
+          error={{
+            code: 'BACKEND_UNAVAILABLE',
+            message: `Backend service is ${backendHealth.error || 'unavailable'}`,
+            getUserFriendlyMessage: () => 'The prediction service is currently unavailable. Please try again later.'
+          }}
+          className="mb-4"
+        />
+      )}
+
       {/* Crypto Selector */}
       <CryptoSelector
         selectedCrypto={selectedCrypto}
@@ -78,39 +110,60 @@ export default function CryptoPrediction() {
             onSequenceUpdate={handleSequenceUpdate}
           />
         )}
+
+        {/* Validation Errors */}
+        {validationErrors && (
+          <ErrorDisplay
+            error={{
+              code: 'VALIDATION_ERROR',
+              message: 'Input validation failed',
+              details: { details: validationErrors.errors },
+              getUserFriendlyMessage: () => 'Please fix the input data issues below:'
+            }}
+            className="mt-4"
+          />
+        )}
       </div>
 
-      {/* Chart Preview */}
-      {sequence.length > 0 && (
-        <ChartPreview
-          data={sequence}
+      {/* Enhanced Chart Preview */}
+      {sequence.length > 0 && isSequenceValid && (
+        <EnhancedChart
+          historicalData={sequence}
+          prediction={lastPrediction?.prediction}
           cryptoType={selectedCrypto}
+          title="Input Data Analysis"
+          showStatistics={true}
+          height={350}
+        />
+      )}
+
+      {/* Loading State */}
+      {isLoading && (
+        <LoadingDisplay 
+          message="AI is analyzing your data"
+          subMessage={`Generating ${selectedCrypto.toUpperCase()} price prediction...`}
+          showProgress={true}
+          estimatedTime={5}
         />
       )}
 
       {/* Predict Button */}
-      <PredictButton
-        onPredict={handlePredict}
-        isLoading={isLoading}
-        disabled={!isSequenceValid}
-        onReset={handleReset}
-      />
+      {!isLoading && (
+        <PredictButton
+          onPredict={handlePredict}
+          isLoading={isLoading}
+          disabled={!isSequenceValid}
+          onReset={handleReset}
+        />
+      )}
 
-      {/* Error Display */}
+      {/* Prediction Error */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <div className="flex">
-            <i className="fas fa-exclamation-circle text-red-400 mr-3 mt-0.5"></i>
-            <div>
-              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
-                Prediction Failed
-              </h3>
-              <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-                {error.message}
-              </p>
-            </div>
-          </div>
-        </div>
+        <ErrorDisplay
+          error={error}
+          onRetry={handlePredict}
+          onDismiss={() => reset()}
+        />
       )}
 
       {/* Prediction Result */}
